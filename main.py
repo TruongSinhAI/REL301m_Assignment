@@ -1,6 +1,5 @@
 import pygame
 import random
-import sys
 from enum import Enum
 
 # Game Constants (giữ nguyên)
@@ -66,12 +65,12 @@ class ResourceManager:
     
     def _load_resources(self):
         # Load images
-        self._load_image("agent", "agent.png")
-        self._load_image("vehicle", "vehicle.png")
+        self._load_image("agent", "./assets/images/agent.png")
+        self._load_image("vehicle", "./assets/images/vehicle.png")
         
         # Load sounds
-        self._load_sound("collision", "crash.mp3")
-        self._load_sound("win", "win.mp3")
+        self._load_sound("crash", "./assets/sounds/crash.ogg")
+        self._load_sound("win", "./assets/sounds/win.ogg")
     
     def _load_image(self, name, path):
         try:
@@ -316,8 +315,6 @@ class CarCrossingEnv:
         # self.win_sound = pygame.mixer.Sound("win.mp3") # Load âm thanh chiến thắng
         # Initialize ResourceManager
         self.resource_manager = ResourceManager()
-        self.resource_manager._load_sound("crash", "crash.ogg")
-        self.resource_manager._load_sound("win", "win.ogg")
         # Load sounds once
         self.collision_sound = self.resource_manager.get_sound("crash")
         self.win_sound = self.resource_manager.get_sound("win")
