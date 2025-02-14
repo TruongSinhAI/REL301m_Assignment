@@ -1,0 +1,31 @@
+COLORS = {
+    'BLACK': (0, 0, 0),
+    'WHITE': (255, 255, 255),
+    'RED': (220, 50, 50),
+    'BLUE': (50, 150, 220),
+    'GRASS': (50, 150, 50),
+    'GOLD': (255, 215, 0),
+    'VEHICLE_LANE': (80, 80, 80),
+    'REST_LANE': (150, 150, 150),
+    'LIGHT_GRAY': (200, 200, 200),
+    'BUTTON_GRAY': (100, 100, 100),
+    'BUTTON_HOVER_GRAY': (120, 120, 120)
+}
+
+GAME_CONFIG = {
+    'TOTAL_LANES': 15,
+    'SCREEN_WIDTH': 600,
+    'SCREEN_HEIGHT': 800,
+    'FPS': 60,
+    'LANE_HEIGHT': 60,
+    'ROAD_TOP': 80,
+    'DASH_LENGTH': 15,
+    'VEHICLE_SPAWN_DELAY': 3000,
+    'MIN_VEHICLE_SPACING': 200,
+    'MIN_VEHICLE_WIDTH': 40,
+    'MAX_VEHICLE_WIDTH': 60,
+    'MIN_VEHICLE_HEIGHT': 30,
+    'MAX_VEHICLE_HEIGHT': 40,
+    'MIN_VEHICLE_SPEED': 2,
+    'MAX_VEHICLE_SPEED': 4
+}
