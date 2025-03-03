@@ -1,6 +1,0 @@
-numpy
-tensorflow
-pygame
-gymnasium
-pandas
-matplotlib

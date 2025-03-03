@@ -30,11 +30,19 @@ def simple_ai_policy(agent, vehicles): # (giữ nguyên)
             return action
     return 0
 
+def load_model(filename, state_dim, action_dim):
+    """Load model đã lưu và khởi tạo lại agent"""
+    from src.agents.td_agent import A2CAgentCNN  # Đảm bảo import đúng
+    agent = A2CAgentCNN(state_dim, action_dim, hidden_dim=256, lr=0.001, gamma=0.9)
+    agent.model.load_state_dict(torch.load(filename))
+    agent.model.eval()
+    return agent
 def main(): # (chỉnh sửa để dừng âm thanh động cơ khi thoát game)
     env = CarCrossingEnv()
     running = True
     mouse_pos = (0, 0)
-
+    observation = env.reset()
+    agent_ai = load_model("a2c_agent_final.pth", 2, 5)
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -87,7 +95,12 @@ def main(): # (chỉnh sửa để dừng âm thanh động cơ khi thoát game)
                 elif keys[pygame.K_RIGHT]:
                     action = 4
             else:
-                action = simple_ai_policy(env.agent, env.vehicles)
+                with torch.no_grad():
+                    state_tensor = torch.FloatTensor(observation).unsqueeze(0)
+                    policy_logits, _ = agent_ai.model(state_tensor)
+                    action = torch.argmax(policy_logits, dim=1).item()
+
+                # action = simple_ai_policy(env.agent, env.vehicles)
 
             observation, reward, done, info = env.step(action)
 
