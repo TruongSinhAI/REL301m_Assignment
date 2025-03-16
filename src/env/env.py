@@ -68,7 +68,6 @@ class BaseCarCrossingEnv:
                 speed = random.randint(self.min_vehicle_speed, self.max_vehicle_speed) + random.random()
                 # x_position = current_x if direction == 1 else GAME_CONFIG['SCREEN_WIDTH'] + current_x
                 x_position = current_x  + random.randint(0, 200)
-                print(x_position)
                 vehicle = BaseVehicle(x_position, lane_y, speed, direction, width, height, lane_index)
                 vehicles_in_lane.append(vehicle)
                 vehicle_spacing = width + GAME_CONFIG['MIN_VEHICLE_SPACING']
