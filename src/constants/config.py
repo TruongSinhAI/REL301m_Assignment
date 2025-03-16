@@ -1,3 +1,4 @@
+
 COLORS = {
     'BLACK': (0, 0, 0),
     'WHITE': (255, 255, 255),
@@ -13,7 +14,7 @@ COLORS = {
 }
 
 GAME_CONFIG = {
-    'TOTAL_LANES': 15,
+    'TOTAL_LANES': 12,
     'SCREEN_WIDTH': 600,
     'SCREEN_HEIGHT': 800,
     'FPS': 60,
@@ -27,5 +28,5 @@ GAME_CONFIG = {
     'MIN_VEHICLE_HEIGHT': 40,
     'MAX_VEHICLE_HEIGHT': 40,
     'MIN_VEHICLE_SPEED': 2,
-    'MAX_VEHICLE_SPEED': 2
+    'MAX_VEHICLE_SPEED': 4
 }

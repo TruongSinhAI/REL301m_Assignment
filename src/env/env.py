@@ -4,15 +4,14 @@ import torch
 import pygame
 import random
 from enum import Enum
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+# Giả sử các module bên trong src đã được định nghĩa:
 from src.agents.frog import *
 from src.agents.vehicle import *
 from src.constants.config import *
 from src.utils.button import Button
-
-
-# Giả sử GAME_CONFIG và COLORS đã được định nghĩa ở nơi khác,
-# cũng như các lớp BaseFrog, Frog, BaseVehicle, Vehicle, Button
 
 class GameState(Enum):
     MENU = 1
@@ -22,13 +21,13 @@ class GameState(Enum):
 
 class BaseCarCrossingEnv:
     def __init__(self):
-        # Road and lane setup
+        # Thiết lập đường và làn xe
         self.total_lanes = GAME_CONFIG['TOTAL_LANES']
         self.lane_height = GAME_CONFIG['LANE_HEIGHT']
         self.road_top = GAME_CONFIG['ROAD_TOP']
         self.road_bottom = self.road_top + self.total_lanes * self.lane_height + 20
 
-        # Vehicle spawn configuration
+        # Cấu hình spawn xe
         self.min_vehicle_spacing = GAME_CONFIG['MIN_VEHICLE_SPACING']
         self.min_vehicle_width = GAME_CONFIG['MIN_VEHICLE_WIDTH']
         self.max_vehicle_width = GAME_CONFIG['MAX_VEHICLE_WIDTH']
@@ -49,28 +48,27 @@ class BaseCarCrossingEnv:
         self.score = 0
         self.current_lane = self.get_lane_index(self.agent.y)
         self.game_state = GameState.PLAYING
-        self.mode = "ai"  # Default to AI mode
+        self.mode = "ai"  # Mặc định chế độ AI
 
     def spawn_vehicles(self):
         self.vehicles = []
         lane_width = GAME_CONFIG['SCREEN_WIDTH'] + 300
         for lane_index in range(self.total_lanes):
-            if lane_index % 3 == 2:  # Skip rest lanes
+            if lane_index % 3 == 2:  # Bỏ qua những lane nghỉ
                 continue
-            lane_y = self.road_top + 20 + lane_index * self.lane_height
+            lane_y = self.road_top + 20 + lane_index * self.lane_height +10
             direction = 1 if lane_index % 2 == 0 else -1
             available_space = lane_width
             vehicles_in_lane = []
             current_x = 0
 
             while available_space > GAME_CONFIG['MIN_VEHICLE_SPACING']:
-                # Có thể dùng kích thước xe cố định hoặc ngẫu nhiên
                 width = 40
                 height = 40
                 speed = random.randint(self.min_vehicle_speed, self.max_vehicle_speed) + random.random()
-                x_position = current_x
-                if direction == -1:
-                    x_position = GAME_CONFIG['SCREEN_WIDTH'] + current_x
+                # x_position = current_x if direction == 1 else GAME_CONFIG['SCREEN_WIDTH'] + current_x
+                x_position = current_x  + random.randint(0, 200)
+                print(x_position)
                 vehicle = BaseVehicle(x_position, lane_y, speed, direction, width, height, lane_index)
                 vehicles_in_lane.append(vehicle)
                 vehicle_spacing = width + GAME_CONFIG['MIN_VEHICLE_SPACING']
@@ -83,16 +81,8 @@ class BaseCarCrossingEnv:
         lane = int((y_pos - (self.road_top + 20)) // self.lane_height)
         return max(lane, 0)
 
-    # --- HÀM STEP ĐÃ ĐƯỢC CẢI TIẾN ---
     def step(self, action):
-        # Lưu trạng thái ban đầu
-        prev_x, prev_y = self.agent.x, self.agent.y
-
-        # Cập nhật điểm cao nhất nếu cần
-        try:
-            self.highest = min(self.highest, self.agent.y)
-        except:
-            self.highest = self.agent.y
+        prev_y = self.agent.y
 
         # Định nghĩa 5 action: 0: không di chuyển, 1: lên, 2: xuống, 3: trái, 4: phải
         action_deltas = {
@@ -103,102 +93,66 @@ class BaseCarCrossingEnv:
             4: (1, 0)    # Right
         }
 
-        # Thực hiện action đã chọn
         dx, dy = action_deltas.get(action, (0, 0))
         self.agent.move(dx, dy)
 
-        # Giới hạn vị trí agent trong vùng cho phép
+        # Giới hạn vị trí agent trong khu vực cho phép
         self.agent.y = max(self.road_top, min(self.agent.y, self.road_bottom - self.agent.height))
         self.agent.x = max(0, min(self.agent.x, GAME_CONFIG['SCREEN_WIDTH'] - self.agent.width))
 
-        # Cập nhật vị trí của các xe
+        # Cập nhật vị trí của xe
         for vehicle in self.vehicles:
             vehicle.update(self.vehicles)
 
-        # Lưu lại trạng thái xe sau cập nhật để dùng cho mô phỏng
-        current_vehicles = [(v.x, v.y, v.width, v.height) for v in self.vehicles]
+        # TÍNH PHẦN THƯỞNG:
+        # 1. Reward tiến lên (progress reward)
+        progress_reward = (prev_y - self.agent.y) * 2.0
 
-        # Tính phần thưởng tiến lên
-        vertical_progress = prev_y - self.agent.y
-        progress_reward = vertical_progress * 2.0
+        # 2. Finish-line bonus: thưởng khi càng gần đường đích (road_top)
+        distance_to_finish = self.agent.y - self.road_top
+        normalized_distance = distance_to_finish / (self.road_bottom - self.road_top)
+        finish_line_bonus = (1 - normalized_distance) * 10
 
-        # Mô phỏng các action thay thế từ trạng thái ban đầu
-        alternative_bonus = 0
-        reward_per_loss = 10  # Tăng bonus để khuyến khích chọn action an toàn
+        # 3. Proximity penalty: phạt khi quá gần xe
+        min_distance = float('inf')
+        for vehicle in self.vehicles:
+            dx = max(0, vehicle.x - (self.agent.x + self.agent.width), self.agent.x - (vehicle.x + vehicle.width))
+            dy = max(0, vehicle.y - (self.agent.y + self.agent.height), self.agent.y - (vehicle.y + vehicle.height))
+            distance = math.sqrt(dx ** 2 + dy ** 2)
+            min_distance = min(min_distance, distance)
+        safe_distance = 50.0
+        proximity_penalty = -10 * np.exp(-min_distance / safe_distance)
 
-        def rect_collision(rect1, rect2):
-            x1, y1, w1, h1 = rect1
-            x2, y2, w2, h2 = rect2
-            return not (x1 + w1 <= x2 or x1 >= x2 + w2 or y1 + h1 <= y2 or y1 >= y2 + h2)
-
-        for alt_action, (dx_alt, dy_alt) in action_deltas.items():
-            if alt_action == action:
-                continue  # Bỏ qua action đã chọn
-
-            sim_x = prev_x + dx_alt
-            sim_y = prev_y + dy_alt
-
-            # Giới hạn vị trí giả lập
-            sim_y = max(self.road_top, min(sim_y, self.road_bottom - self.agent.height))
-            sim_x = max(0, min(sim_x, GAME_CONFIG['SCREEN_WIDTH'] - self.agent.width))
-
-            sim_rect = (sim_x, sim_y, self.agent.width, self.agent.height)
-
-            collision = False
-            for (vx, vy, vwidth, vheight) in current_vehicles:
-                if rect_collision(sim_rect, (vx, vy, vwidth, vheight)):
-                    collision = True
-                    break
-            if collision:
-                alternative_bonus += reward_per_loss
-
-        # Thêm “safety penalty” dựa trên khoảng cách đến xe gần nhất
-        safety_penalty = self._calculate_collision_risk() * 5  # Hệ số điều chỉnh
-
-        # Thêm time penalty để khuyến khích hoàn thành nhanh
+        # 4. Time penalty: khuyến khích hoàn thành nhanh
         time_penalty = -0.2
 
-        # Tổng hợp reward
-        reward = progress_reward + alternative_bonus + safety_penalty + time_penalty
+        # 5. Lane bonus: thưởng khi chuyển sang lane cao hơn
+        lane_bonus = 0
+        new_lane = self.get_lane_index(self.agent.y)
+        if new_lane < self.current_lane:
+            lane_bonus = (self.current_lane - new_lane) * 5
 
-        # Kiểm tra va chạm thực tế
+
+        reward = progress_reward + finish_line_bonus + proximity_penalty + time_penalty + lane_bonus
+        self.update_score()
+
+        # Kiểm tra va chạm: nếu va chạm thì kết thúc game với phạt nặng
         for vehicle in self.vehicles:
             if self._check_collision(self.agent, vehicle):
                 self.done = True
-                reward = -100  # Phạt va chạm
+                reward = -200
                 self.game_state = GameState.GAME_OVER
                 break
 
-        # Kiểm tra điều kiện thắng (agent đạt tới đích)
+        # Kiểm tra thắng cuộc: nếu agent đạt đến đường đích
         if self.agent.y <= self.road_top:
             self.done = True
-            reward = 100  # Phần thưởng thắng
+            reward = 200
             self.score += 100
             self.game_state = GameState.GAME_OVER
 
-        # Cập nhật score theo làn agent đã vượt qua
-        self.update_score()
-
         observation = self.get_observation()
         return observation, reward, self.done, self.score
-
-    def _calculate_collision_risk(self):
-        """Tính toán mức độ nguy hiểm dựa trên khoảng cách đến xe gần nhất."""
-        min_distance = float('inf')
-        for vehicle in self.vehicles:
-            dx = max(0, max(self.agent.x - (vehicle.x + vehicle.width), vehicle.x - (self.agent.x + self.agent.width)))
-            dy = max(0, max(self.agent.y - (vehicle.y + vehicle.height), vehicle.y - (self.agent.y + self.agent.height)))
-            distance = math.sqrt(dx ** 2 + dy ** 2)
-            min_distance = min(min_distance, distance)
-        # Ánh xạ khoảng cách sang risk score: càng gần (distance thấp) thì risk càng âm
-        if min_distance < 1:
-            return -1.0
-        elif min_distance < 3:
-            return -0.5
-        elif min_distance < 5:
-            return -0.2
-        else:
-            return 0
 
     def _check_collision(self, agent, vehicle):
         return (agent.x < vehicle.x + vehicle.width and
@@ -212,42 +166,45 @@ class BaseCarCrossingEnv:
             self.score += (self.current_lane - new_lane) * 5
             self.current_lane = new_lane
 
-    # --- CẢI TIẾN GET_OBSERVATION: THÊM EXTRA CHANNEL VỚI RISK ---
     def get_observation(self):
-        cell_size = 40
-        grid_width = GAME_CONFIG['SCREEN_WIDTH'] // cell_size
-        grid_height = GAME_CONFIG['SCREEN_HEIGHT'] // cell_size
-
-        # Khởi tạo grid cho agent và xe
-        grid = np.zeros((grid_height, grid_width), dtype=np.float32)
-
-        # Đánh dấu vị trí của agent với giá trị 1
-        agent_grid_x = min(max(0, int(self.agent.x // cell_size)), grid_width - 1)
-        agent_grid_y = min(max(0, int(self.agent.y // cell_size)), grid_height - 1)
-        grid[agent_grid_y][agent_grid_x] = 1.0
-
-        # Đánh dấu xe với giá trị 2
+        # 1. Vị trí agent (đã chuẩn hóa)
+        agent_x_norm = self.agent.x / GAME_CONFIG['SCREEN_WIDTH']
+        agent_y_norm = self.agent.y / GAME_CONFIG['SCREEN_HEIGHT']
+        # 2. Làn hiện tại
+        lane_norm = self.get_lane_index(self.agent.y) / self.total_lanes
+        # 3. Risk feature
+        risk_norm = (self._calculate_collision_risk() + 1)
+        # 4. Thông tin các xe xung quanh
+        agent_center = np.array([self.agent.x + self.agent.width / 2, self.agent.y + self.agent.height / 2])
+        vehicles_features = []
         for vehicle in self.vehicles:
-            min_x = max(0, int(vehicle.x // cell_size))
-            max_x = min(grid_width - 1, int((vehicle.x + vehicle.width) // cell_size))
-            min_y = max(0, int(vehicle.y // cell_size))
-            max_y = min(grid_height - 1, int((vehicle.y + vehicle.height) // cell_size))
-            for y in range(min_y, max_y + 1):
-                for x in range(min_x, max_x + 1):
-                    grid[y][x] = 2.0
+            vehicle_center = np.array([vehicle.x + vehicle.width / 2, vehicle.y + vehicle.height / 2])
+            rel_pos = (vehicle_center - agent_center) / np.array([GAME_CONFIG['SCREEN_WIDTH'], GAME_CONFIG['SCREEN_HEIGHT']])
+            speed_norm = (vehicle.speed - self.min_vehicle_speed) / (self.max_vehicle_speed - self.min_vehicle_speed)
+            vehicles_features.append(np.concatenate([rel_pos, [speed_norm]]))
+        vehicles_features.sort(key=lambda feat: np.linalg.norm(feat[:2]))
+        N = 5
+        obs_vehicles = np.zeros(3 * N)
+        for i in range(min(len(vehicles_features), N)):
+            obs_vehicles[i * 3:(i + 1) * 3] = vehicles_features[i]
 
-        # Chuẩn hóa grid về [0, 1]
-        grid = grid / 2.0
+        observation = np.concatenate([
+            np.array([agent_x_norm, agent_y_norm, lane_norm, risk_norm]),
+            obs_vehicles
+        ])
+        return observation.astype(np.float32)
 
-        # Tạo extra channel với risk: sử dụng _calculate_collision_risk
-        risk = self._calculate_collision_risk()  # Giá trị trong khoảng [-1, 0]
-        risk_channel = np.full((grid_height, grid_width), risk, dtype=np.float32)
-        # Chuẩn hóa risk_channel: -1 -> 0 (nguy hiểm) và 0 -> 1 (an toàn)
-        risk_channel = (risk_channel + 1) / 1.0
-
-        # Xếp chồng 2 kênh để tạo observation (shape: [2, grid_height, grid_width])
-        observation = np.stack([grid, risk_channel], axis=0)
-        return observation
+    def _calculate_collision_risk(self):
+        min_distance = float('inf')
+        for vehicle in self.vehicles:
+            agent_center = (self.agent.x + self.agent.width / 2, self.agent.y + self.agent.height / 2)
+            vehicle_center = (vehicle.x + vehicle.width / 2, vehicle.y + vehicle.height / 2)
+            distance = math.sqrt((agent_center[0] - vehicle_center[0]) ** 2 +
+                                 (agent_center[1] - vehicle_center[1]) ** 2)
+            min_distance = min(min_distance, distance)
+        safe_distance = 50.0
+        risk = -1 + (min(min_distance, safe_distance) / safe_distance)
+        return risk
 
     def reset(self):
         self.agent = BaseFrog()
@@ -263,14 +220,14 @@ class BaseCarCrossingEnv:
     def close(self):
         pygame.quit()
 
-# --- PHẦN ENVIRONMENT CHO GIAO DIỆN (GUI) ---
+# ENVIRONMENT cho giao diện (GUI)
 class CarCrossingEnv(BaseCarCrossingEnv):
     def __init__(self):
         pygame.init()
+        self.screen = pygame.display.set_mode((GAME_CONFIG['SCREEN_WIDTH'], GAME_CONFIG['SCREEN_HEIGHT']))
         pygame.mixer.init()
         super().__init__()
 
-        self.screen = pygame.display.set_mode((GAME_CONFIG['SCREEN_WIDTH'], GAME_CONFIG['SCREEN_HEIGHT']))
         pygame.display.set_caption("Car Crossing Game")
         self.clock = pygame.time.Clock()
 
@@ -281,7 +238,7 @@ class CarCrossingEnv(BaseCarCrossingEnv):
         self.vehicles = []
         self.spawn_vehicles()
 
-        # Fonts và Buttons
+        # Khởi tạo fonts và buttons
         self.FPS_font = pygame.font.SysFont("Helvetica", 24)
         self.title_font = pygame.font.SysFont("Helvetica", 72, bold=True)
         self.menu_font = pygame.font.SysFont("Helvetica", 36)
@@ -354,7 +311,7 @@ class CarCrossingEnv(BaseCarCrossingEnv):
         for lane_index in range(self.total_lanes):
             if lane_index % 3 == 2:
                 continue
-            lane_y = self.road_top + 20 + lane_index * self.lane_height
+            lane_y = self.road_top + 20 + lane_index * self.lane_height +10
             direction = 1 if lane_index % 2 == 0 else -1
             available_space = lane_width
             vehicles_in_lane = []
@@ -364,9 +321,8 @@ class CarCrossingEnv(BaseCarCrossingEnv):
                 width = random.randint(self.min_vehicle_width, self.max_vehicle_width)
                 height = random.randint(self.min_vehicle_height, self.max_vehicle_height)
                 speed = random.randint(self.min_vehicle_speed, self.max_vehicle_speed) + random.random()
-                x_position = current_x
-                if direction == -1:
-                    x_position = GAME_CONFIG['SCREEN_WIDTH'] + current_x
+                x_position = current_x if direction == 1 else GAME_CONFIG['SCREEN_WIDTH'] + current_x
+                x_position = current_x + random.randint(0, 200)
                 vehicle = Vehicle(x_position, lane_y, speed, direction, width, height, lane_index)
                 vehicles_in_lane.append(vehicle)
                 vehicle_spacing = width + GAME_CONFIG['MIN_VEHICLE_SPACING']

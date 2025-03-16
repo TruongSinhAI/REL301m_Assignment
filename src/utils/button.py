@@ -1,6 +1,7 @@
 import pygame
 from src.constants.config import COLORS
-
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 class Button:
     def __init__(self, text, x, y, width, height, color, hover_color, font, action=None):

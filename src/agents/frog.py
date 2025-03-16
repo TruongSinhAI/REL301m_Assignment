@@ -1,7 +1,8 @@
 from src.constants.config import *
 from src.utils.resource_manager import ResourceManager
 import pygame
-
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 class BaseFrog:
     def __init__(self):
         self.width = 40

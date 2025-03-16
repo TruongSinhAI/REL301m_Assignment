@@ -1,6 +1,7 @@
 from src.utils.resource_manager import ResourceManager
 from src.agents.vehicle import *
-
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 class VehiclePool:
     def __init__(self, initial_size=50):

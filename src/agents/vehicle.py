@@ -1,7 +1,8 @@
 from src.constants.config import *
 from src.utils.resource_manager import ResourceManager
 import pygame
-
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 class BaseVehicle:
     def __init__(self, x, y, speed, direction, width=60, height=40, lane_index=0):
         self.x = x
